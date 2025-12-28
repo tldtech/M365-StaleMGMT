@@ -2,6 +2,10 @@
 # See https://aka.ms/functionsmanageddependency for additional information.
 #
 @{
-    # For latest supported version, go to 'https://www.powershellgallery.com/packages/Az'. Uncomment the next line and replace the MAJOR_VERSION, e.g., 'Az' = '5.*'
-    # 'Az' = 'MAJOR_VERSION.*'
+  'Az.Accounts'                    = '2.*'
+  'Az.Resources'                   = '6.*'
+  'Az.KeyVault'                    = '6.*'
+  'Az.Storage'                     = '6.*'
+  'Microsoft.Graph.Authentication' = '2.*'
+  'Microsoft.Graph.Applications'   = '2.*'
 }
