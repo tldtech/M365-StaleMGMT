@@ -80,7 +80,11 @@ function Invoke-GraphGetAll {
             foreach ($v in $resp.value) { $items.Add($v) }
         }
 
-        $next = $resp.'@odata.nextLink'
+        $next = if ($resp.PSObject.Properties.Name -contains '@odata.nextLink') {
+            $resp.'@odata.nextLink'
+        } else {
+            $null
+        }
     }
 
     return $items
