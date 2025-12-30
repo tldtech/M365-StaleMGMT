@@ -139,10 +139,20 @@ try {
     $devices = Invoke-GraphGetAll -Uri $uri -AccessToken $token
     Write-Host "Devices fetched: $($devices.Count)"
 
-    $results = foreach ($d in $devices) {
+    $results = @(foreach ($d in $devices) {
         $classification = Classify-Device -Device $d -CutoffUtc $cutoffUtc
 
         $lastSignInUtc = Parse-GraphDateUtcOrNull -Value $d.approximateLastSignInDateTime
+        $createdUtc = Parse-GraphDateUtcOrNull -Value $d.createdDateTime
+
+        # Calculate days since last activity (sign-in or creation)
+        $daysSinceLastActivity = if ($lastSignInUtc) {
+            [int]($nowUtc - $lastSignInUtc).TotalDays
+        } elseif ($createdUtc) {
+            [int]($nowUtc - $createdUtc).TotalDays
+        } else {
+            $null
+        }
 
         [pscustomobject]@{
             id                            = $d.id
@@ -156,22 +166,23 @@ try {
             approximateLastSignInDateTime = $d.approximateLastSignInDateTime
             lastSignInUtc                 = if ($lastSignInUtc) { $lastSignInUtc.ToString('o') } else { $null }
             classification                = $classification
-            staleCutoffUtc                = $cutoffUtc.ToString('o')
-            staleDays                     = $staleDays
+            daysSinceLastActivity         = $daysSinceLastActivity
+            staleThresholdDateUtc         = $cutoffUtc.ToString('o')
+            staleDaysThreshold            = $staleDays
         }
-    }
+    })
 
-    $counts = $results | Group-Object classification | ForEach-Object {
+    $counts = @($results | Group-Object classification | ForEach-Object {
         [pscustomobject]@{ classification = $_.Name; count = $_.Count }
-    }
+    })
 
     $report = [pscustomobject]@{
-        version        = "v1-entra-only"
-        generatedAtUtc = $nowUtc.ToString('o')
-        staleDays      = $staleDays
-        totalDevices   = $devices.Count
-        summary        = $counts
-        items          = $results
+        version            = "v1-entra-only"
+        generatedAtUtc     = $nowUtc.ToString('o')
+        staleDaysThreshold = $staleDays
+        totalDevices       = $devices.Count
+        summary            = $counts
+        items              = $results
     }
 
     $json = $report | ConvertTo-Json -Depth 6
