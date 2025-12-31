@@ -7,6 +7,6 @@
     "MODE": "detect",
     "GRAPH_API_VERSION": "v1.0",
     "MAX_ACTIONS": "10",
-    "EXTENSION_NAME": "com.uscloud.staleDeviceSweep"
+    "EXTENSION_NAME": "com.staleDeviceSweep"
   }
 }
