@@ -559,7 +559,7 @@ function ConvertTo-GraphDateUtc {
 function Get-ActivityTimestamp {
     param(
         [datetime]$LastSignInUtc = $null,
-        [datetime]$IntuneLastSyncUtc = $null,
+        [Nullable[datetime]]$IntuneLastSyncUtc = $null,
         [Parameter(Mandatory)][ValidateSet('signin', 'intune', 'mostrecent')][string]$ActivitySource
     )
 
