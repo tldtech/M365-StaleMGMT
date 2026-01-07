@@ -125,7 +125,7 @@ Choose the appropriate permission bundle based on your deployment needs:
 
 #### Granting Permissions
 
-Use the included `Grant-DeviceSweepPermissions.ps1` script to interactively grant permissions:
+Use the included `Grant-DeviceSweepPermissions.ps1` script to interactively grant application-type permissions:
 
 ```powershell
 # Run with default identity (Microsoft Graph Command Line Tools)

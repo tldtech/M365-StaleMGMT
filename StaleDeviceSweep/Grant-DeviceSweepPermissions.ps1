@@ -1,5 +1,3 @@
-#Requires -Modules Microsoft.Graph.Authentication, Microsoft.Graph.Applications
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -19,7 +17,7 @@ $ErrorActionPreference = 'Stop'
     The object ID of the service principal (managed identity or app registration) to grant permissions to.
 
 .EXAMPLE
-    .\AppEntraPermissions.ps1
+    .\Grant-DeviceSweepPermissions.ps1
 #>
 
 param(
@@ -120,7 +118,8 @@ try {
 
     # Get the Microsoft Graph service principal
     Write-Host "Retrieving Microsoft Graph service principal..." -ForegroundColor Cyan
-    $graph = Get-MgServicePrincipal -Filter "AppId eq '00000003-0000-0000-c000-000000000000'"
+    $graph = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'"
+    $graph = $graph.value[0]
     
     if (-not $graph) {
         throw 'Microsoft Graph service principal not found.'
@@ -128,8 +127,8 @@ try {
 
     # Get existing app role assignments to avoid duplicates
     Write-Host "Checking existing permissions..." -ForegroundColor Cyan
-    $existing = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $ServicePrincipalObjectId -ErrorAction SilentlyContinue
-    $existingAppRoleIds = $existing | Select-Object -ExpandProperty AppRoleId
+    $existing = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$ServicePrincipalObjectId/appRoleAssignments"
+    $existingAppRoleIds = $existing.value | Select-Object -ExpandProperty appRoleId | ForEach-Object { $_ -split ' ' } | Select-Object -Unique
 
     $grantedCount = 0
     $skippedCount = 0
@@ -164,7 +163,7 @@ try {
         # Grant the app role
         try {
             Write-Host "  Granting..." -ForegroundColor Cyan
-            New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $ServicePrincipalObjectId -BodyParameter $appRoleAssignment | Out-Null
+            Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$ServicePrincipalObjectId/appRoleAssignments" -Body $appRoleAssignment | Out-Null
             Write-Host "  ✓ Granted successfully" -ForegroundColor Green
             $grantedCount++
         }
