@@ -125,11 +125,11 @@ Choose the appropriate permission bundle based on your deployment needs:
 
 #### Granting Permissions
 
-Use the included `AppEntraPermissions.ps1` script to interactively grant permissions:
+Use the included `Grant-DeviceSweepPermissions.ps1` script to interactively grant permissions:
 
 ```powershell
 # Run with default identity (Microsoft Graph Command Line Tools)
-.\AppEntraPermissions.ps1
+.\Grant-DeviceSweepPermissions.ps1
 
 # Or specify a different service principal
-.\AppEntraPermissions.ps1 -ServicePrincipalObjectId "your-object-id-here"
+.\Grant-DeviceSweepPermissions.ps1 -ServicePrincipalObjectId "your-object-id-here"
