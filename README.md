@@ -1,34 +1,100 @@
-# Stale Device Sweep - Azure Function
+# Stale Device Sweep - Azure Function v2.0
 
-An Azure Function that identifies and reports stale devices in Microsoft Entra ID (formerly Azure AD) based on last sign-in activity.
+An Azure Function that identifies and manages stale devices in Microsoft Entra ID with optional Intune integration for intelligent decision-making and automated actions.
 
 ## Overview
 
-This function runs on a timer schedule to scan all devices in your Entra ID tenant and classifies them based on their last sign-in activity. It generates a JSON report that can be used for compliance, security auditing, or device lifecycle management.
+This function runs on a timer schedule to scan all devices in your Entra ID tenant, classify them based on activity, and optionally take automated actions. Version 2.0 adds Intune-aware decision rules to prevent false positives and support advanced device lifecycle management scenarios.
 
 ## Features
 
 - **Automated Device Classification**: Categorizes devices as Active, Stale, Stale-NoSignIn, or Unknown
-- **Configurable Staleness Threshold**: Set custom day thresholds via environment variables
+- **Intune Integration**: Optional enrichment with Intune managed device data for smarter decisions
+- **Multiple Operation Modes**: detect, disable, tag, decide, execute
+- **Intelligent Decision Rules**: Prevent false positives with configurable safety checks
+- **Flexible Activity Sources**: Use Entra sign-in, Intune sync, or most recent timestamp
+- **Action Execution**: Disable, tag, retire, wipe, or delete devices
+- **Safety Controls**: Per-action confirmation flags and throttle limits
 - **Dual Authentication**: Supports both Managed Identity (production) and Azure CLI (local development)
-- **Report Generation**: Outputs detailed JSON reports to Azure Blob Storage
-- **Timer-based Execution**: Runs automatically on a schedule (default: every 5 minutes)
+- **Comprehensive Reporting**: JSON reports and human-readable summaries to Azure Blob Storage
+
+## Version History
+
+- **v2.0**: Intune-aware decision rules + optional Intune actions + correlation improvements
+- **v1.0**: Basic Entra-only reporting and simple disable/tag actions
+
+## Operation Modes
+
+### Legacy Modes (v1 behavior)
+- **detect**: Preview which stale devices would be acted on (dry-run)
+- **disable**: Disable stale devices in Entra ID (requires `CONFIRM_DISABLE=true`)
+- **tag**: Tag stale devices using open extensions (requires `CONFIRM_TAG=true`)
+
+### Advanced Modes (v2 behavior)
+- **decide**: Build an Intune-aware action plan without execution (preview with intelligence)
+- **execute**: Execute the Intune-aware action plan with per-action confirmations
 
 ## Configuration
 
-### Environment Variables
+### Core Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `STALE_DAYS` | `90` | Number of days of inactivity before a device is considered stale |
-| `MODE` | `report` | Operation mode: `report` (v1 is report-only) |
+| `MODE` | `detect` | Operation mode: `detect`, `disable`, `tag`, `decide`, `execute` |
 | `GRAPH_API_VERSION` | `v1.0` | Microsoft Graph API version to use |
+| `MAX_ACTIONS` | `50` | Maximum total actions to perform in a single run |
+
+### Intune Integration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INCLUDE_INTUNE` | `false` | Enable Intune managed device data enrichment |
+| `ACTIVITY_SOURCE` | `signin` | Activity timestamp source: `signin`, `intune`, `mostRecent` |
+| `INTUNE_STALE_DAYS` | `90` | Intune staleness threshold (defaults to `STALE_DAYS`) |
+
+### Decision Rules (MODE=decide/execute)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REQUIRE_BOTH_STALE_FOR_DISABLE` | `true` | Require both Entra AND Intune stale before disabling |
+| `DONT_DISABLE_IF_INTUNE_RECENT_SYNC` | `true` | Skip devices that recently synced with Intune |
+| `INTUNE_RECENT_SYNC_DAYS` | `14` | Days to consider "recent" sync |
+| `DONT_DISABLE_IF_COMPLIANT` | `true` | Skip compliant devices |
+| `ONLY_DISABLE_IF_MANAGEDAGENT_IN` | `mdm,easmdm` | Only disable if management agent matches (empty = no filter) |
+| `ALLOW_DISABLE_ON_DUPLICATE` | `false` | Allow disable when multiple Intune matches exist |
+
+### Action Confirmations
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONFIRM_DISABLE` | `false` | Enable Entra device disabling |
+| `CONFIRM_TAG` | `false` | Enable open extension tagging |
+| `CONFIRM_INTUNE_RETIRE` | `false` | Enable Intune retire action |
+| `CONFIRM_INTUNE_WIPE` | `false` | Enable Intune wipe action (⚠️ destructive) |
+| `CONFIRM_INTUNE_DELETE` | `false` | Enable Intune delete action (⚠️ destructive) |
+
+### Action Throttles
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_DISABLE` | `50` | Maximum Entra devices to disable |
+| `MAX_TAG` | `50` | Maximum devices to tag |
+| `MAX_RETIRE` | `25` | Maximum Intune retires |
+| `MAX_WIPE` | `5` | Maximum Intune wipes |
+| `MAX_INTUNE_DELETE` | `25` | Maximum Intune deletes |
+
+### Other Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EXTENSION_NAME` | `STALE` | Open extension name for tagging |
 
 ### Schedule
 
 The function is triggered by a timer using a [cron expression](https://en.wikipedia.org/wiki/Cron#CRON_expression) defined in `function.json`:
 
-- **Default**: `0 */5 * * * *` (every 5 minutes)
+- **Default**: `0 30 1 * * *` (daily at 1:30 AM UTC)
 - Format: `{second} {minute} {hour} {day} {month} {day-of-week}`
 
 ### Required Permissions
@@ -67,78 +133,3 @@ Use the included `AppEntraPermissions.ps1` script to interactively grant permiss
 
 # Or specify a different service principal
 .\AppEntraPermissions.ps1 -ServicePrincipalObjectId "your-object-id-here"
-
-## Device Classification Logic
-
-1. **Active**: Device has `approximateLastSignInDateTime` within the staleness threshold
-2. **Stale**: Device has `approximateLastSignInDateTime` older than the staleness threshold
-3. **Stale-NoSignIn**: Device has never signed in and `createdDateTime` is older than the threshold
-4. **Unknown**: Device lacks sign-in data and was created recently (conservative classification)
-
-## Output
-
-Reports are written to Azure Blob Storage with the following structure:
-
-```json
-{
-    "version": "v1-entra-only",
-    "generatedAtUtc": "2025-12-30T12:05:06.9088009Z",
-    "staleDaysThreshold": 90,
-    "totalDevices": 1,
-    "summary": [
-        {
-            "classification": "Active",
-            "count": 1
-        }
-    ],
-    "items": [
-        {
-            "id": "102dec0e-ed05-45a6-804c-aae7590908ba",
-            "displayName": "iPhone",
-            "deviceId": "20a629d5-8d94-4b69-b5bc-751f6900bd6d",
-            "accountEnabled": true,
-            "operatingSystem": "iOS",
-            "operatingSystemVersion": "26.2",
-            "trustType": "Workplace",
-            "createdDateTime": "2025-12-23T10:48:26Z",
-            "approximateLastSignInDateTime": "2025-12-23T10:48:25Z",
-            "lastSignInUtc": "2025-12-23T10:48:25.0000000Z",
-            "classification": "Active",
-            "daysSinceLastActivity": 7,
-            "staleThresholdDateUtc": "2025-10-01T12:05:06.9088009Z",
-            "staleDaysThreshold": 90
-        }
-    ]
-}
-```
-
-Each device item includes:
-- Device identifiers (id, displayName, deviceId)
-- Status information (accountEnabled, trustType)
-- Operating system details
-- Classification and timestamps
-
-## Local Development
-
-1. Install Azure Functions Core Tools
-2. Install PowerShell modules: `Microsoft.Graph.Authentication`, `Microsoft.Graph.Applications`
-3. Authenticate with Azure CLI: `az login`
-4. Run: `func host start`
-
-The function will use your Azure CLI credentials when Managed Identity is not available.
-
-## Deployment
-
-Deploy to Azure Functions with PowerShell runtime. Ensure:
-- System-assigned or user-assigned Managed Identity is enabled
-- Graph API permissions are granted
-- Environment variables are configured
-- Storage account connection string is set in `AzureWebJobsStorage`
-
-## Future Enhancements
-
-Version 1 is report-only. Future versions may include:
-- Automatic device deletion or disablement
-- Integration with Intune for hybrid device management
-- Email notifications for stale device reports
-- Custom retention policies per device type
