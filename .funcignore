@@ -1,7 +1,56 @@
-.git*
-.vscode
-__azurite_db*__.json
-__blobstorage__
-__queuestorage__
+############################
+# Git & editor junk
+############################
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.vs/
+*.suo
+*.user
+
+############################
+# OS junk
+############################
+.DS_Store
+Thumbs.db
+desktop.ini
+
+############################
+# Build & local output
+############################
+bin/
+obj/
+dist/
+wwwroot/
+output/
+reports/
+*.log
+*.trace
+
+############################
+# Local config (Azure uses app settings instead)
+############################
 local.settings.json
-test
+.env
+.env.*
+
+############################
+# Node tooling (not needed at runtime)
+############################
+node_modules/
+
+############################
+# PowerShell cache
+############################
+PSModules/
+.psmodules/
+
+############################
+# IMPORTANT:
+# Keep /Modules/Required deployed
+############################
+Modules/*
+!Modules/Required/
+!Modules/Required/**
+!Modules/README.md
