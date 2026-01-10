@@ -132,4 +132,5 @@ Use the included `Grant-DeviceSweepPermissions.ps1` script to interactively gran
 .\Grant-DeviceSweepPermissions.ps1 -ServicePrincipalObjectId "your-object-id-here"
 ```
 
-Coming soon: ![Deploy to Azure](https://aka.ms/deploytoazurebutton)
+Coming soon:
+![Deploy to Azure](https://aka.ms/deploytoazurebutton)
