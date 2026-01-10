@@ -131,4 +131,5 @@ Use the included `Grant-DeviceSweepPermissions.ps1` script to interactively gran
 # Specify a service principal, managed identity or enterprise application.
 .\Grant-DeviceSweepPermissions.ps1 -ServicePrincipalObjectId "your-object-id-here"
 ```
-![Deploy to Azure](https://aka.ms/deploytoazurebutton)
+
+Coming soon: ![Deploy to Azure](https://aka.ms/deploytoazurebutton)
