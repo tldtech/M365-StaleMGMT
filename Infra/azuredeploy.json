@@ -1,6 +1,6 @@
 {
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    "contentVersion": "2.0.0.0",
+    "contentVersion": "2.0.1.0",
     "parameters": {
         "location": {
             "type": "string",
@@ -15,35 +15,7 @@
             "minLength": 3,
             "maxLength": 15,
             "metadata": {
-                "description": "Short prefix used to generate unique resource names (letters/numbers recommended)."
-            }
-        },
-        "functionAppName": {
-            "type": "string",
-            "defaultValue": "[toLower(concat(parameters('namePrefix'), '-func-', uniqueString(resourceGroup().id)))]",
-            "metadata": {
-                "description": "Function App name (must be globally unique)."
-            }
-        },
-        "storageAccountName": {
-            "type": "string",
-            "defaultValue": "[toLower(substring(concat(parameters('namePrefix'), uniqueString(resourceGroup().id, 'stg')), 0, 24))]",
-            "metadata": {
-                "description": "Storage account name (3-24 chars, lowercase letters/numbers only)."
-            }
-        },
-        "appInsightsName": {
-            "type": "string",
-            "defaultValue": "[toLower(concat(parameters('namePrefix'), '-ai-', uniqueString(resourceGroup().id)))]",
-            "metadata": {
-                "description": "Application Insights name."
-            }
-        },
-        "logAnalyticsWorkspaceName": {
-            "type": "string",
-            "defaultValue": "[toLower(concat(parameters('namePrefix'), '-law-', uniqueString(resourceGroup().id)))]",
-            "metadata": {
-                "description": "Log Analytics Workspace name (for workspace-based App Insights)."
+                "description": "Short prefix used to generate unique resource names."
             }
         },
         "powerShellVersion": {
@@ -215,7 +187,7 @@
             "type": "string",
             "defaultValue": "mdm,easmdm",
             "metadata": {
-                "description": "ONLY_DISABLE_IF_MANAGEDAGENT_IN (comma-separated)."
+                "description": "ONLY_DISABLE_IF_MANAGEDAGENT_IN (comma-separated). Empty disables the constraint."
             }
         },
         "confirmIntuneRetire": {
@@ -311,7 +283,7 @@
             "type": "string",
             "defaultValue": "",
             "metadata": {
-                "description": "EXCEPTION_NAME_PATTERNS (comma-separated patterns). Leave blank to disable."
+                "description": "EXCEPTION_NAME_PATTERNS (comma-separated wildcards). Leave blank to disable."
             }
         },
         "exceptionDeviceIds": {
@@ -330,17 +302,30 @@
             "metadata": {
                 "description": "WEBSITE_RUN_FROM_PACKAGE. Set to 1 for zip/package deployment."
             }
+        },
+        "logAnalyticsRetentionDays": {
+            "type": "int",
+            "defaultValue": 30,
+            "minValue": 30,
+            "maxValue": 730,
+            "metadata": {
+                "description": "Log Analytics retention days (30-730)."
+            }
         }
     },
     "variables": {
         "planName": "[toLower(concat(parameters('namePrefix'), '-fc-', uniqueString(resourceGroup().id)))]",
+        "functionAppName": "[toLower(concat(parameters('namePrefix'), '-func-', uniqueString(resourceGroup().id)))]",
+        "storageAccountName": "[toLower(substring(concat(parameters('namePrefix'), uniqueString(resourceGroup().id, 'stg')), 0, 24))]",
+        "logAnalyticsWorkspaceName": "[toLower(concat(parameters('namePrefix'), '-law-', uniqueString(resourceGroup().id)))]",
+        "appInsightsName": "[toLower(concat(parameters('namePrefix'), '-ai-', uniqueString(resourceGroup().id)))]",
         "storageSku": "Standard_LRS"
     },
     "resources": [
         {
             "type": "Microsoft.Storage/storageAccounts",
             "apiVersion": "2023-01-01",
-            "name": "[parameters('storageAccountName')]",
+            "name": "[variables('storageAccountName')]",
             "location": "[parameters('location')]",
             "kind": "StorageV2",
             "sku": {
@@ -356,10 +341,10 @@
         {
             "type": "Microsoft.OperationalInsights/workspaces",
             "apiVersion": "2023-09-01",
-            "name": "[parameters('logAnalyticsWorkspaceName')]",
+            "name": "[variables('logAnalyticsWorkspaceName')]",
             "location": "[parameters('location')]",
             "properties": {
-                "retentionInDays": 30
+                "retentionInDays": "[parameters('logAnalyticsRetentionDays')]"
             },
             "sku": {
                 "name": "PerGB2018"
@@ -368,15 +353,15 @@
         {
             "type": "Microsoft.Insights/components",
             "apiVersion": "2020-02-02",
-            "name": "[parameters('appInsightsName')]",
+            "name": "[variables('appInsightsName')]",
             "location": "[parameters('location')]",
             "kind": "web",
             "properties": {
                 "Application_Type": "web",
-                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
             },
             "dependsOn": [
-                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+                "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
             ]
         },
         {
@@ -396,7 +381,7 @@
         {
             "type": "Microsoft.Web/sites",
             "apiVersion": "2023-01-01",
-            "name": "[parameters('functionAppName')]",
+            "name": "[variables('functionAppName')]",
             "location": "[parameters('location')]",
             "kind": "functionapp,linux",
             "identity": {
@@ -404,8 +389,8 @@
             },
             "dependsOn": [
                 "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-                "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+                "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
             ],
             "properties": {
                 "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
@@ -417,7 +402,7 @@
                     "appSettings": [
                         {
                             "name": "AzureWebJobsStorage",
-                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=', environment().suffixes.storage)]"
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=', environment().suffixes.storage)]"
                         },
                         {
                             "name": "FUNCTIONS_EXTENSION_VERSION",
@@ -433,7 +418,7 @@
                         },
                         {
                             "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-                            "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]"
+                            "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
                         },
                         {
                             "name": "STALE_DAYS",
@@ -555,27 +540,27 @@
     "outputs": {
         "functionAppName": {
             "type": "string",
-            "value": "[parameters('functionAppName')]"
+            "value": "[variables('functionAppName')]"
         },
         "functionAppHostname": {
             "type": "string",
-            "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2023-01-01').defaultHostName]"
+            "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')), '2023-01-01').defaultHostName]"
         },
         "functionAppPrincipalId": {
             "type": "string",
-            "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2023-01-01', 'Full').identity.principalId]"
+            "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')), '2023-01-01', 'Full').identity.principalId]"
         },
         "storageAccountName": {
             "type": "string",
-            "value": "[parameters('storageAccountName')]"
+            "value": "[variables('storageAccountName')]"
         },
         "appInsightsName": {
             "type": "string",
-            "value": "[parameters('appInsightsName')]"
+            "value": "[variables('appInsightsName')]"
         },
         "logAnalyticsWorkspaceName": {
             "type": "string",
-            "value": "[parameters('logAnalyticsWorkspaceName')]"
+            "value": "[variables('logAnalyticsWorkspaceName')]"
         },
         "planName": {
             "type": "string",
