@@ -1,10 +1,10 @@
-# Stale Device Sweep - Azure Function v2.0
+# Stale Device Sweep - Azure Function
 
 An Azure Function that identifies and manages stale devices in Microsoft Entra ID with optional Intune integration for intelligent decision-making and automated actions.
 
 ## Overview
 
-This function runs on a timer schedule to scan all devices in your Entra ID tenant, classify them based on activity, and optionally take automated actions. Version 2.0 adds Intune-aware decision rules to prevent false positives and support advanced device lifecycle management scenarios.
+This function runs on a timer schedule to scan all devices in your Entra ID tenant, classify them based on activity, and optionally take automated actions. The function adds Intune-aware decision rules to prevent false positives and support advanced device lifecycle management scenarios.
 
 ## Features
 
@@ -25,12 +25,12 @@ This function runs on a timer schedule to scan all devices in your Entra ID tena
 
 ## Operation Modes
 
-### Legacy Modes (v1 behavior)
+### Basic Modes
 - **detect**: Preview which stale devices would be acted on (dry-run)
 - **disable**: Disable stale devices in Entra ID (requires `CONFIRM_DISABLE=true`)
 - **tag**: Tag stale devices using open extensions (requires `CONFIRM_TAG=true`)
 
-### Advanced Modes (v2 behavior)
+### Advanced Modes
 - **decide**: Build an Intune-aware action plan without execution (preview with intelligence)
 - **execute**: Execute the Intune-aware action plan with per-action confirmations
 
