@@ -247,33 +247,33 @@ Write-Host "Decision rules:          requireBothStaleForDisable=$requireBothStal
 # ---------------------------
 
 $cfgEvent = @{
-    eventType                     = "staleDeviceSweep.config"
-    version                       = "v2.0-intune-decisioning"
-    mode                          = $mode
-    includeIntune                 = $includeIntune
-    activitySource                = $activitySource
-    staleDays                     = $staleDays
-    intuneStaleDays               = $intuneStaleDays
-    maxActions                    = $maxActions
-    actionParallelism             = $actionParallelism
+    eventType         = "staleDeviceSweep.config"
+    version           = "v2.0-intune-decisioning"
+    mode              = $mode
+    includeIntune     = $includeIntune
+    activitySource    = $activitySource
+    staleDays         = $staleDays
+    intuneStaleDays   = $intuneStaleDays
+    maxActions        = $maxActions
+    actionParallelism = $actionParallelism
 
-    confirms = @{
-        disable                    = $confirmDisable
-        tag                        = $confirmTag
-        intuneRetire               = $confirmIntuneRetire
-        intuneWipe                 = $confirmIntuneWipe
-        intuneDelete               = $confirmIntuneDelete
+    confirms          = @{
+        disable      = $confirmDisable
+        tag          = $confirmTag
+        intuneRetire = $confirmIntuneRetire
+        intuneWipe   = $confirmIntuneWipe
+        intuneDelete = $confirmIntuneDelete
     }
 
-    limits = @{
-        maxDisable                 = $maxDisable
-        maxTag                     = $maxTag
-        maxRetire                  = $maxRetire
-        maxWipe                    = $maxWipe
-        maxIntuneDelete            = $maxIntuneDelete
+    limits            = @{
+        maxDisable      = $maxDisable
+        maxTag          = $maxTag
+        maxRetire       = $maxRetire
+        maxWipe         = $maxWipe
+        maxIntuneDelete = $maxIntuneDelete
     }
 
-    decisionRules = @{
+    decisionRules     = @{
         requireBothStaleForDisable = $requireBothStaleForDisable
         dontDisableIfRecentSync    = $dontDisableIfIntuneRecentSync
         intuneRecentSyncDays       = $intuneRecentSyncDays
@@ -1025,7 +1025,7 @@ try {
     # Optional Intune index (duplicates preserved)
     $intuneIndex = $null
     $intuneStats = $null
-        # Fetch exception group members if configured
+    # Fetch exception group members if configured
     $exceptionGroupMembers = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     if (-not [string]::IsNullOrWhiteSpace($exceptionGroupId)) {
         $exceptionGroupMembers = Get-ExceptionGroupMembers -GroupId $exceptionGroupId -AccessToken $token -GraphApiVersion $graphApiVersion
@@ -1597,6 +1597,24 @@ try {
     Push-OutputBinding -Name summaryBlob -Value $summaryText
     Write-Host "Summary text (first 100 chars): $($summaryText.Substring(0, [Math]::Min(100, $summaryText.Length)))"
     Write-Host "Reports written to blob output bindings."
+    
+    # Emit structured result for workbook metrics
+    $resultEvent = @{
+        eventType       = "staleDeviceSweep.result"
+        candidateCount  = $report.devices.Count
+        activeCount     = $counts.active
+        staleCount      = $counts.stale
+        plannedActions  = $actionPlan.Count
+        executedActions = $actionsExecuted.Count
+        actionBreakdown = @{
+            disable = ($actionsExecuted | Where-Object { $_.action -eq 'disable' }).Count
+            tag     = ($actionsExecuted | Where-Object { $_.action -eq 'tag' }).Count
+            retire  = ($actionsExecuted | Where-Object { $_.action -eq 'intune-retire' }).Count
+            wipe    = ($actionsExecuted | Where-Object { $_.action -eq 'intune-wipe' }).Count
+            delete  = ($actionsExecuted | Where-Object { $_.action -eq 'intune-delete' }).Count
+        }
+    }
+    Write-Host ("RESULT " + ($resultEvent | ConvertTo-Json -Compress))
 }
 catch {
     Write-Error $_
