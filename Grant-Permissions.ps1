@@ -3,61 +3,110 @@ $ErrorActionPreference = 'Stop'
 
 <#
 .SYNOPSIS
-    Grant Microsoft Graph API permissions to a service principal for stale device management.
+    Grant Microsoft Graph API permissions to a service principal for stale device and user management.
 
 .DESCRIPTION
-    Interactive script to grant one or more Graph API permissions required by the
-    Stale Device Sweep Azure Function:
+    Interactive script to grant Graph API permissions required by the Entra ID Stale Resource Management functions:
+    
+    Device Management (StaleDeviceSweep):
     - Device.Read.All: Read Entra ID device information
     - Device.ReadWrite.All: Disable devices and tag with open extensions
-    - Device.Read.All + DeviceManagementManagedDevices.Read.All: Read Intune managed device data
-    - Device.ReadWrite.All + DeviceManagementManagedDevices.ReadWrite.All: Retire/wipe/delete Intune devices
+    - DeviceManagementManagedDevices.Read.All: Read Intune managed device data
+    - DeviceManagementManagedDevices.ReadWrite.All: Retire/wipe/delete Intune devices
+    - GroupMember.Read.All: Support for exception groups
+    
+    User Management (StaleUserSweep):
+    - User.Read.All: Read Entra ID user information
+    - AuditLog.Read.All: Read sign-in activity data
+    - User.ReadWrite.All: Disable user accounts
+    - Directory.ReadWrite.All: Tag users with open extensions
+    - GroupMember.Read.All: Support for exception groups
 
 .PARAMETER ServicePrincipalObjectId
     The object ID of the service principal (managed identity or app registration) to grant permissions to.
 
+.PARAMETER ResourceType
+    The type of resource to grant permissions for: 'Device', 'User', or 'Both'. Default: 'Device'
+
 .EXAMPLE
-    .\Grant-DeviceSweepPermissions.ps1
+    # Grant device management permissions
+    .\Grant-DeviceSweepPermissions.ps1 -ServicePrincipalObjectId "12345678-1234-1234-1234-123456789abc"
+
+.EXAMPLE
+    # Grant user management permissions
+    .\Grant-DeviceSweepPermissions.ps1 -ServicePrincipalObjectId "12345678-1234-1234-1234-123456789abc" -ResourceType User
+
+.EXAMPLE
+    # Grant both device and user management permissions
+    .\Grant-DeviceSweepPermissions.ps1 -ServicePrincipalObjectId "12345678-1234-1234-1234-123456789abc" -ResourceType Both
 #>
 
 param(
     [Parameter(Mandatory=$true)]
-    [string]$ServicePrincipalObjectId # The Microsoft Entra object id of the enterprise application to which we are granting the app role.
+    [string]$ServicePrincipalObjectId, # The Microsoft Entra object id of the enterprise application to which we are granting the app role.
+    
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Device', 'User', 'Both')]
+    [string]$ResourceType = 'Device'
 )
 
-# Available permission bundles
-$permissionBundles = @(
+# Available permission bundles for devices
+$devicePermissionBundles = @(
     [PSCustomObject]@{
-        Name = 'Entra Read Only'
+        Name = 'Device: Entra Read Only'
         Description = 'Read Entra ID device information (detect mode only)'
         Permissions = @('Device.Read.All')
         Recommended = 'For preview/reporting only'
     },
     [PSCustomObject]@{
-        Name = 'Entra Read + Write'
+        Name = 'Device: Entra Read + Write'
         Description = 'Disable devices and tag with open extensions'
         Permissions = @('Device.ReadWrite.All')
         Recommended = 'For disable/tag modes without Intune'
     },
     [PSCustomObject]@{
-        Name = 'Entra + Intune Read'
+        Name = 'Device: Entra + Intune Read'
         Description = 'Read Entra ID and Intune managed device data'
         Permissions = @('Device.Read.All', 'DeviceManagementManagedDevices.Read.All')
         Recommended = 'For Intune-aware decision planning (MODE=decide)'
     },
     [PSCustomObject]@{
-        Name = 'Entra + Intune Full Access'
+        Name = 'Device: Entra + Intune Full Access'
         Description = 'Full access: Disable, tag, retire, wipe, and delete devices'
         Permissions = @('Device.ReadWrite.All', 'DeviceManagementManagedDevices.ReadWrite.All')
         Recommended = 'For complete automation (MODE=execute with all actions)'
     },
     [PSCustomObject]@{
-        Name = 'Entra + Intune Full Access + Exception Groups'
+        Name = 'Device: Full Access + Exception Groups'
         Description = 'Full access with support for exception groups (EXCEPTION_GROUP_ID)'
         Permissions = @('Device.ReadWrite.All', 'DeviceManagementManagedDevices.ReadWrite.All', 'GroupMember.Read.All')
         Recommended = 'For complete automation with group-based device exceptions'
     }
 )
+
+# Available permission bundles for users
+$userPermissionBundles = @(
+    [PSCustomObject]@{
+        Name = 'User: Read Only'
+        Description = 'Read Entra ID user and sign-in activity (detect mode only)'
+        Permissions = @('AuditLog.Read.All', 'User.Read.All', 'GroupMember.Read.All')
+        Recommended = 'For preview/reporting only (without exception groups)'
+    },
+    [PSCustomObject]@{
+        Name = 'User: Read + Write'
+        Description = 'Disable user accounts and tag with open extensions'
+        Permissions = @('AuditLog.Read.All', 'User.ReadWrite.All', 'Directory.ReadWrite.All', 'GroupMember.Read.All')
+        Recommended = 'For disable/tag modes (without exception groups)'
+    }
+)
+
+# Select which bundles to show based on ResourceType
+$permissionBundles = @()
+switch ($ResourceType) {
+    'Device' { $permissionBundles = $devicePermissionBundles }
+    'User' { $permissionBundles = $userPermissionBundles }
+    'Both' { $permissionBundles = $devicePermissionBundles + $userPermissionBundles }
+}
 
 # Prompt for service principal object ID if not provided
 if (-not $ServicePrincipalObjectId) {
@@ -72,7 +121,7 @@ if (-not $ServicePrincipalObjectId) {
 }
 
 # Display available permission bundles
-Write-Host "`n=== Microsoft Graph API Permission Bundles ===" -ForegroundColor Green
+Write-Host "`n=== Microsoft Graph API Permission Bundles ($ResourceType) ===" -ForegroundColor Green
 Write-Host ""
 for ($i = 0; $i -lt $permissionBundles.Count; $i++) {
     $bundle = $permissionBundles[$i]
@@ -87,6 +136,9 @@ for ($i = 0; $i -lt $permissionBundles.Count; $i++) {
 
 # Prompt for bundle selection
 Write-Host "Select a permission bundle (enter number):" -ForegroundColor Cyan
+if ($ResourceType -eq 'Both') {
+    Write-Host "  TIP: You can select multiple bundles by running this script multiple times" -ForegroundColor Gray
+}
 Write-Host "  Example: 2" -ForegroundColor Gray
 $selection = Read-Host "`nSelection"
 

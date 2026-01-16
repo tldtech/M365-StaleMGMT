@@ -224,28 +224,33 @@ Choose the appropriate permission bundle based on your deployment needs:
 **1. User Read Only** (Minimal - Reporting Only)
 - `User.Read.All` - Read Entra ID user information
 - `AuditLog.Read.All` - Read sign-in activity data
-- **Use case**: Detection/reporting mode only (`MODE=detect`)
+- `GroupMember.Read.All` - Read group membership for exceptions
+- **Use case**: Detection/reporting mode only (`MODE=detect')
 
-**2. User Read + Write** (Full Actions)
+**3. User Read + Write** (Full Actions)
 - `User.Read.All` - Read Entra ID user information
 - `AuditLog.Read.All` - Read sign-in activity data
 - `User.ReadWrite.All` - Disable user accounts
 - `Directory.ReadWrite.All` - Tag users with open extensions
-- **Use case**: Disable/tag modes (`MODE=disable`, `MODE=tag`)
-
-**3. Exception Lists** (Optional - Add to any bundle)
-- `GroupMember.Read.All` - Required if using `EXCEPTION_GROUP_ID`
+- `GroupMember.Read.All` - Read group membership for exceptions
+- **Use case**: Disable/tag modes without exception groups
 
 #### Granting Permissions
 
-Use the included `Grant-DeviceSweepPermissions.ps1` script to interactively grant application-type permissions:
+Use the included `Grant-Permissions.ps1` script to interactively grant application-type permissions for both device and user management:
 
 ```powershell
-# For device sweep permissions
-.\StaleDeviceSweep\Grant-DeviceSweepPermissions.ps1 -ServicePrincipalObjectId "your-object-id-here"
+# Grant device sweep permissions (default)
+.\Grant-Permissions.ps1 -ServicePrincipalObjectId "your-object-id-here"
 
-# Grant user sweep permissions manually via Azure Portal or Microsoft Graph PowerShell
+# Grant user sweep permissions
+.\Grant-Permissions.ps1  -ServicePrincipalObjectId "your-object-id-here" -ResourceType User
+
+# Show all available bundles (device + user)
+.\Grant-Permissions.ps1  -ServicePrincipalObjectId "your-object-id-here" -ResourceType Both
 ```
+
+The script provides interactive bundle selection with descriptions and recommended use cases for each permission set.
 
 ## Example Configurations
 
