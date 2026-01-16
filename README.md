@@ -323,7 +323,7 @@ OUTPUT_INVENTORY_CSV=true
 
 A pre-built Azure Monitor Workbook is included for visualizing function execution and device management trends:
 
-**Location**: `StaleDeviceSweep/Workbooks/M365-StaleDeviceSweep.json`
+**Location**: `Workbooks/M365-StaleDeviceSweep.json`
 
 **Features**:
 - Recent function runs with configuration and results
