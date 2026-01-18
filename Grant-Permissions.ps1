@@ -43,7 +43,7 @@ param(
     [string]$ServicePrincipalObjectId, # The Microsoft Entra object id of the enterprise application to which we are granting the app role.
     
     [ValidateSet('Device', 'User', 'Both')]
-    [string]$ResourceType = 'Device'
+    [string]$ResourceType = 'Both'
 )
 
 Set-StrictMode -Version Latest
