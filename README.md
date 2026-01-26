@@ -28,8 +28,11 @@ Both functions run on timer schedules to scan resources in your Entra ID tenant,
 
 ### StaleUserSweep
 
-- **User Account Classification**: Categorizes users as Active, Stale, Stale-NoSignIn, or Unknown
+- **User Account Classification**: Categorizes member and guest users with activity-based staleness detection
+  - Member accounts: Active, Stale, Stale-NoSignIn, Unknown
+  - Guest accounts: Guest-PendingActive, Guest-PendingStale, Guest-AcceptedActive, Guest-AcceptedStale, Guest-AcceptedNoActivity
 - **Sign-In Activity Tracking**: Uses Entra ID sign-in activity data (requires AuditLog.Read.All)
+- **Guest Lifecycle Awareness**: Differentiates pending vs. accepted guest invitations for appropriate lifecycle management
 - **Operation Modes**: detect, disable, tag
 - **Exception Handling**: Protect specific users via groups, UPN patterns, or explicit IDs
 - **Action Execution**: Disable accounts or tag with metadata
@@ -253,6 +256,40 @@ Use the included `Grant-Permissions.ps1` script to interactively grant applicati
 ```
 
 The script provides interactive bundle selection with descriptions and recommended use cases for each permission set.
+
+## User Classification Scheme
+
+### StaleUserSweep User Categories
+
+StaleUserSweep classifies users into distinct categories based on account type (member vs. guest), activity status, and lifecycle state:
+
+#### Member Accounts
+
+| Classification | Condition | Action Eligible | Notes |
+|---|---|---|---|
+| **Active** | Most recent activity within cutoff period | ❌ No | User has signed in recently |
+| **Stale** | Most recent sign-in before cutoff period | ✅ Yes | User has not signed in recently; targeted for disable/tag |
+| **Stale-NoSignIn** | No sign-in data AND createdDateTime before cutoff | ✅ Yes | Never signed in AND account is older than threshold |
+| **Unknown** | No sign-in data AND created within or after cutoff | ❌ No | Insufficient data; not acted upon |
+
+#### Guest Accounts
+
+Guest account classification includes awareness of the guest invitation lifecycle (pending vs. accepted):
+
+| Classification | Condition | Action Eligible | Notes |
+|---|---|---|---|
+| **Guest-PendingActive** | PendingAcceptance state AND created within cutoff | ❌ No | Pending invite is recent; no action needed |
+| **Guest-PendingStale** | PendingAcceptance state AND createdDateTime before cutoff | ❌ No | Pending invite is old; use **guest lifecycle controls** in Entra (invitation expiry, auto-delete) instead of disable |
+| **Guest-AcceptedActive** | Accepted state AND most recent sign-in within cutoff | ❌ No | Guest has signed in recently; no action needed |
+| **Guest-AcceptedStale** | Accepted state AND most recent sign-in before cutoff | ❌ No | Guest has not signed in recently; requires **manual review** or access reviews |
+| **Guest-AcceptedNoActivity** | Accepted state AND no sign-in data available | ❌ No | Guest status unknown; **requires manual review or access review process** |
+
+**Guest Handling Strategy:**
+- **Pending guests older than threshold** are excluded from automated disable actions because guest lifecycle management should be handled through Entra's native guest expiration controls
+- **Accepted guests with no activity data** are excluded because guest removal decisions require manual review or automated access review processes
+- Reporting includes guest classifications in the summary and inventory for manual triage and access review workflows
+
+---
 
 ## Example Configurations
 
