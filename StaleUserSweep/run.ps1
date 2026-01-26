@@ -504,10 +504,36 @@ function ConvertTo-GraphDateUtc {
 function Get-UserClassification {
     param(
         [Parameter(Mandatory)] [datetime] $CutoffUtc,
-        [datetime] $LastSignInUtc = $null,
-        [datetime] $CreatedUtc = $null
+        [System.Nullable[System.DateTime]] $LastSignInUtc = $null,
+        [System.Nullable[System.DateTime]] $CreatedUtc = $null,
+        [string] $UserType = 'Member',
+        [string] $ExternalUserState = $null
     )
 
+    # Handle guest accounts with special lifecycle considerations
+    if ($UserType -eq 'Guest') {
+        # Pending guests (invitation not yet accepted)
+        if ($ExternalUserState -eq 'PendingAcceptance') {
+            if ($CreatedUtc -and $CreatedUtc -lt $CutoffUtc) {
+                return 'Guest-PendingStale'  # Pending invite older than threshold
+            }
+            return 'Guest-PendingActive'    # Pending invite, but recent
+        }
+        
+        # Accepted guests - require manual review if no sign-in data
+        if ([string]::IsNullOrWhiteSpace($ExternalUserState) -or $ExternalUserState -eq 'Accepted') {
+            if ($LastSignInUtc) {
+                if ($LastSignInUtc -lt $CutoffUtc) {
+                    return 'Guest-AcceptedStale'
+                }
+                return 'Guest-AcceptedActive'
+            }
+            # Accepted guest with no sign-in data - requires manual review
+            return 'Guest-AcceptedNoActivity'
+        }
+    }
+
+    # Member account classification
     if ($LastSignInUtc) {
         if ($LastSignInUtc -lt $CutoffUtc) { 
             return 'Stale' 
@@ -585,7 +611,8 @@ try {
     # Fetch Entra users with sign-in activity
     # Note: When including signInActivity, the maximum page size is 500 per Microsoft Graph API documentation
     # See: https://learn.microsoft.com/en-us/graph/api/user-list (Example 11)
-    $select = "id,userPrincipalName,displayName,accountEnabled,userType,createdDateTime,signInActivity"
+    # Include externalUserState to detect guest lifecycle (e.g., PendingAcceptance vs Accepted)
+    $select = "id,userPrincipalName,displayName,accountEnabled,userType,createdDateTime,signInActivity,externalUserState"
     $uri = "https://graph.microsoft.com/$graphApiVersion/users?`$select=$([uri]::EscapeDataString($select))&`$top=500"
     $users = Invoke-GraphGetAll -Uri $uri -AccessToken $token
     Write-Host "Entra users fetched: $($users.Count)"
@@ -607,10 +634,17 @@ try {
     $results = [System.Collections.Generic.List[object]]::new($users.Count)
 
     foreach ($u in $users) {
-        $lastSignInUtc = ConvertTo-GraphDateUtc -Value $u.signInActivity.lastSignInDateTime
+        # Safely access signInActivity; guest accounts may not have this property
+        $lastSignInUtc = $null
+        if ($u.PSObject.Properties.Name -contains 'signInActivity' -and $null -ne $u.signInActivity) {
+            $lastSignInUtc = ConvertTo-GraphDateUtc -Value $u.signInActivity.lastSignInDateTime
+        }
+        
         $createdUtc = ConvertTo-GraphDateUtc -Value $u.createdDateTime
+        $userType = $u.userType ?? 'Member'
+        $externalUserState = $u.externalUserState ?? $null
 
-        $classification = Get-UserClassification -CutoffUtc $cutoffUtc -LastSignInUtc $lastSignInUtc -CreatedUtc $createdUtc
+        $classification = Get-UserClassification -CutoffUtc $cutoffUtc -LastSignInUtc $lastSignInUtc -CreatedUtc $createdUtc -UserType $userType -ExternalUserState $externalUserState
 
         $daysSinceLastActivity = if ($lastSignInUtc) {
             [int]($nowUtc - $lastSignInUtc).TotalDays
@@ -634,8 +668,9 @@ try {
             displayName           = $u.displayName
             accountEnabled        = $u.accountEnabled
             userType              = $u.userType
+            externalUserState     = $externalUserState
             createdDateTime       = $u.createdDateTime
-            lastSignInDateTime    = $u.signInActivity.lastSignInDateTime
+            lastSignInDateTime    = if ($u.PSObject.Properties.Name -contains 'signInActivity' -and $null -ne $u.signInActivity) { $u.signInActivity.lastSignInDateTime } else { $null }
             lastSignInUtc         = if ($lastSignInUtc) { $lastSignInUtc.ToString('o') } else { $null }
             classification        = $classification
             daysSinceLastActivity = $daysSinceLastActivity
@@ -671,10 +706,21 @@ try {
     $actionPlan = [System.Collections.Generic.List[object]]::new()
 
     # Select candidates (stale users, not exceptions, not already disabled)
+    # Exclude: Guest-PendingStale (pending invites), Guest-AcceptedNoActivity (needs manual review)
     $candidates = @($results | Where-Object { 
             $_.classification -in @('Stale', 'Stale-NoSignIn') -and 
             -not $_.isException
         })
+    
+    # Log excluded guest classifications
+    $excludedGuestPending = @($results | Where-Object { $_.classification -eq 'Guest-PendingStale' })
+    $excludedGuestNoActivity = @($results | Where-Object { $_.classification -eq 'Guest-AcceptedNoActivity' })
+    if ($excludedGuestPending.Count -gt 0) {
+        Write-Host "Excluded $($excludedGuestPending.Count) pending guests (older than cutoff) - use guest lifecycle controls instead"
+    }
+    if ($excludedGuestNoActivity.Count -gt 0) {
+        Write-Host "Excluded $($excludedGuestNoActivity.Count) accepted guests with no activity - require manual review/access review"
+    }
 
     $plannedCount = [Math]::Min($candidates.Count, $maxActions)
 
