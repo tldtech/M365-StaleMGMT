@@ -4,6 +4,9 @@
 
 .DESCRIPTION
     This Azure Function identifies stale user accounts in Entra ID (Azure AD) based on sign-in activity.
+    
+    REQUIREMENTS: This function requires AuditLog.Read.All permission, which is only available in tenants
+    with Microsoft Entra ID P1 or P2 licenses. Ensure your tenant has the appropriate licenses before deploying.
 
     Modes:
     - detect:  Shows which stale users would be acted on (dry-run/preview)
