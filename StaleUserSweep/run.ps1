@@ -810,7 +810,7 @@ try {
                 $props = @{
                     status             = "stale"
                     classification     = $a.classification
-                    version            = "v1.0-user-sweep"
+                    version            = "StaleUserSweep"
                     evaluatedAtUtc     = $nowUtcStr
                     staleDaysThreshold = $staleDays
                     cutoffUtc          = $cutoffUtcStr

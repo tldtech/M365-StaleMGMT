@@ -1171,7 +1171,7 @@ try {
 
     # Report base
     $report = [pscustomobject]@{
-        version            = "v2.0-intune-decisioning"
+        version            = "StaleDeviceSweep"
         generatedAtUtc     = $nowUtcStr
         staleDaysThreshold = $staleDays
         intuneStaleDays    = $intuneStaleDays
