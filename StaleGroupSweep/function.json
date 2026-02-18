@@ -1,0 +1,22 @@
+{
+  "bindings": [
+    {
+      "name": "Timer",
+      "type": "timerTrigger",
+      "direction": "in",
+      "schedule": "0 0 1 * * *"
+    },
+    {
+      "name": "actionPlanCsv",
+      "type": "blob",
+      "direction": "out",
+      "path": "csv-output/groupSweep-actionPlan-{UtcNow:yyyy-MM-dd-HHmmss}.csv"
+    },
+    {
+      "name": "inventoryCsv",
+      "type": "blob",
+      "direction": "out",
+      "path": "csv-output/groupSweep-inventory-{UtcNow:yyyy-MM-dd-HHmmss}.csv"
+    }
+  ]
+}
