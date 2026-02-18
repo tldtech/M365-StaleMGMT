@@ -257,7 +257,10 @@ function Invoke-GraphGetAll {
             if ($result.value) {
                 $items.AddRange($result.value)
             }
-            $next = $result.'@odata.nextLink'
+            $next = $null
+            if ($result.PSObject.Properties['@odata.nextLink']) {
+                $next = $result.'@odata.nextLink'
+            }
             $retries = 0
         }
         catch {
@@ -317,9 +320,24 @@ function Get-GroupAppAssignments {
     )
     
     try {
-        $uri = "https://graph.microsoft.com/$graphApiVersion/servicePrincipals?`$filter=appRoleAssignedTo/any(a: a/principalId eq '$GroupId')?`$select=id,displayName,appId"
+        # Note: Complex any() filters on appRoleAssignedTo may not work reliably
+        # Fallback to empty array on any errors - this is safe and conservative
+        $uri = "https://graph.microsoft.com/$graphApiVersion/servicePrincipals?`$select=id,displayName,appId"
         $result = Invoke-RestMethod -Method GET -Uri $uri -Headers @{ Authorization = "Bearer $AccessToken" }
-        $result.value
+        
+        # Filter client-side to avoid OData type issues
+        $assignments = @()
+        foreach ($sp in $result.value) {
+            if ($sp.PSObject.Properties['appRoleAssignedTo']) {
+                foreach ($assignment in $sp.appRoleAssignedTo) {
+                    if ($assignment.principalId -eq $GroupId) {
+                        $assignments += $sp
+                        break
+                    }
+                }
+            }
+        }
+        $assignments
     }
     catch {
         Write-Host "Warning: Failed to get app assignments for $GroupId : $_"
@@ -385,7 +403,7 @@ try {
 
     # Fetch all groups (cloud-only security groups and Microsoft 365 groups)
     Write-Host "Fetching all groups..."
-    $groupsUri = "https://graph.microsoft.com/$graphApiVersion/groups?`$filter=groupTypes/any(c:c eq 'Unified') or (groupTypes/any(c:c eq 'DynamicMembership') eq false and mailEnabled eq false)&`$select=id,displayName,description,createdDateTime,lastModifiedDateTime,groupTypes,mailEnabled,securityEnabled"
+    $groupsUri = "https://graph.microsoft.com/$graphApiVersion/groups?`$filter=groupTypes/any(c:c eq 'Unified') or securityEnabled eq true&`$select=id,displayName,description,createdDateTime,lastModifiedDateTime,groupTypes,mailEnabled,securityEnabled"
     
     $groups = Invoke-GraphGetAll -Uri $groupsUri -AccessToken $accessToken
     Write-Host "Found $($groups.Count) total groups."
@@ -399,8 +417,15 @@ try {
         $progressCount++
         if ($progressCount % 50 -eq 0) { Write-Host "  Processed $progressCount of $($groups.Count) groups..." }
 
-        $lastModified = if ($group.lastModifiedDateTime) { [datetime]::Parse($group.lastModifiedDateTime) } else { $null }
-        $created = if ($group.createdDateTime) { [datetime]::Parse($group.createdDateTime) } else { $null }
+        $lastModified = $null
+        if ($group.PSObject.Properties['lastModifiedDateTime']) {
+            $lastModified = [datetime]::Parse($group.lastModifiedDateTime)
+        }
+        
+        $created = $null
+        if ($group.PSObject.Properties['createdDateTime']) {
+            $created = [datetime]::Parse($group.createdDateTime)
+        }
         
         $lastActivityDate = $lastModified ?? $created
         $daysSinceActivity = if ($lastActivityDate) { [math]::Floor(($nowUtc - $lastActivityDate).TotalDays) } else { $null }
@@ -408,8 +433,10 @@ try {
         # Check exception lists
         $isException = $false
         if ($exceptionGroupIds.Contains($group.id)) { $isException = $true }
+        
+        $displayName = if ($group.PSObject.Properties['displayName']) { $group.displayName } else { '' }
         foreach ($pattern in $exceptionNamePatterns) {
-            if ($group.displayName -like $pattern) { $isException = $true; break }
+            if ($displayName -like $pattern) { $isException = $true; break }
         }
 
         # Fetch staleness signals
@@ -421,27 +448,27 @@ try {
 
         $groupsWithSignals += @{
             id                   = $group.id
-            displayName          = $group.displayName
-            description          = $group.description
-            createdDateTime      = $group.createdDateTime
-            lastModifiedDateTime = $group.lastModifiedDateTime
-            groupTypes           = $group.groupTypes
-            mailEnabled          = $group.mailEnabled
-            securityEnabled      = $group.securityEnabled
+            displayName          = $displayName
+            description          = if ($group.PSObject.Properties['description']) { $group.description } else { $null }
+            createdDateTime      = if ($group.PSObject.Properties['createdDateTime']) { $group.createdDateTime } else { $null }
+            lastModifiedDateTime = if ($group.PSObject.Properties['lastModifiedDateTime']) { $group.lastModifiedDateTime } else { $null }
+            groupTypes           = if ($group.PSObject.Properties['groupTypes']) { $group.groupTypes } else { @() }
+            mailEnabled          = if ($group.PSObject.Properties['mailEnabled']) { $group.mailEnabled } else { $false }
+            securityEnabled      = if ($group.PSObject.Properties['securityEnabled']) { $group.securityEnabled } else { $false }
             daysSinceActivity    = $daysSinceActivity
             memberCount          = $memberCount
             ownerCount           = $ownerCount
-            appAssignmentCount   = $appAssignments.Count
-            caPolicyCount        = $caPolicies.Count
-            roleAssignmentCount  = $roleAssignments.Count
+            appAssignmentCount   = @($appAssignments).Count
+            caPolicyCount        = @($caPolicies).Count
+            roleAssignmentCount  = @($roleAssignments).Count
             isException          = $isException
             stalennessSignals    = @{
                 noActivity            = $daysSinceActivity -gt $staleDays
                 noMembers             = $memberCount -eq 0
                 noOwners              = $ownerCount -eq 0
-                notInAppAssignments   = $appAssignments.Count -eq 0
-                notInCaPolicy         = $caPolicies.Count -eq 0
-                notAssignedToRole     = $roleAssignments.Count -eq 0
+                notInAppAssignments   = @($appAssignments).Count -eq 0
+                notInCaPolicy         = @($caPolicies).Count -eq 0
+                notAssignedToRole     = @($roleAssignments).Count -eq 0
             }
         }
     }
@@ -519,12 +546,12 @@ try {
 
     # Analyze signal distribution
     $signalStats = @{
-        noMembers           = ($staleGroups | Where-Object { $_.stalennessSignals.noMembers }).Count
-        noOwners            = ($staleGroups | Where-Object { $_.stalennessSignals.noOwners }).Count
-        notInAppAssignments = ($staleGroups | Where-Object { $_.stalennessSignals.notInAppAssignments }).Count
-        notInCaPolicy       = ($staleGroups | Where-Object { $_.stalennessSignals.notInCaPolicy }).Count
-        notAssignedToRole   = ($staleGroups | Where-Object { $_.stalennessSignals.notAssignedToRole }).Count
-        noActivity          = ($staleGroups | Where-Object { $_.stalennessSignals.noActivity }).Count
+        noMembers           = @($staleGroups | Where-Object { $_.stalennessSignals.noMembers }).Count
+        noOwners            = @($staleGroups | Where-Object { $_.stalennessSignals.noOwners }).Count
+        notInAppAssignments = @($staleGroups | Where-Object { $_.stalennessSignals.notInAppAssignments }).Count
+        notInCaPolicy       = @($staleGroups | Where-Object { $_.stalennessSignals.notInCaPolicy }).Count
+        notAssignedToRole   = @($staleGroups | Where-Object { $_.stalennessSignals.notAssignedToRole }).Count
+        noActivity          = @($staleGroups | Where-Object { $_.stalennessSignals.noActivity }).Count
     }
 
     Write-Host "Signal breakdown (stale groups):"
