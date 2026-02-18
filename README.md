@@ -4,12 +4,13 @@ Azure Functions for identifying and managing stale devices and user accounts in 
 
 ## Overview
 
-This solution provides two complementary functions:
+This solution provides three complementary functions:
 
 - **StaleDeviceSweep**: Manages device lifecycle with optional Intune integration for intelligent decision-making
 - **StaleUserSweep**: Manages user account lifecycle based on sign-in activity
+- **StaleGroupSweep**: Manages Entra ID group lifecycle based on member activity and usage signals
 
-Both functions run on timer schedules to scan resources in your Entra ID tenant, classify them based on activity, and optionally take automated actions with built-in safety controls.
+All functions run on timer schedules to scan resources in your Entra ID tenant, classify them based on activity, and optionally take automated actions with built-in safety controls.
 
 ## Features
 
@@ -39,6 +40,20 @@ Both functions run on timer schedules to scan resources in your Entra ID tenant,
 - **Safety Controls**: Confirmation flags and throttle limits
 - **Comprehensive Reporting**: JSON reports and human-readable summaries to Azure Blob Storage
 
+### StaleGroupSweep
+
+- **Group Staleness Detection**: Multi-signal analysis to identify unused groups:
+  - Activity tracking (last modification/member changes)
+  - Membership analysis (no members or no owners)
+  - Usage signals (app assignments, conditional access policies, role assignments)
+- **Multi-Signal Scoring**: Groups classified as stale based on combined signals
+- **Operation Modes**: detect, delete, tag, archive
+- **Teams Integration**: Archive Microsoft 365 teams groups
+- **Exception Handling**: Protect specific groups via ID patterns or display name wildcards
+- **Action Execution**: Delete, tag with metadata, or archive Teams groups
+- **Safety Controls**: Confirmation flags and per-action throttle limits
+- **Comprehensive Reporting**: JSON reports and human-readable summaries to Azure Blob Storage
+
 ## Version History
 
 ### StaleDeviceSweep
@@ -47,6 +62,9 @@ Both functions run on timer schedules to scan resources in your Entra ID tenant,
 
 ### StaleUserSweep
 - **v1.0**: User account staleness detection and management
+
+### StaleGroupSweep
+- **v1.0**: Group staleness detection with multi-signal analysis
 
 ## Operation Modes
 
@@ -66,6 +84,13 @@ Both functions run on timer schedules to scan resources in your Entra ID tenant,
 - **detect**: Preview which stale user accounts would be acted on (dry-run)
 - **disable**: Disable stale user accounts in Entra ID (requires `CONFIRM_DISABLE=true`)
 - **tag**: Tag stale user accounts using open extensions (requires `CONFIRM_TAG=true`)
+
+### StaleGroupSweep
+
+- **detect**: Preview which stale groups would be acted on (dry-run)
+- **delete**: Delete stale groups in Entra ID (requires `CONFIRM_DELETE=true`)
+- **tag**: Tag stale groups using open extensions (requires `CONFIRM_TAG=true`)
+- **archive**: Archive stale Teams groups (requires `CONFIRM_ARCHIVE=true`)
 
 ## Configuration
 
@@ -184,7 +209,52 @@ Protect specific users from any automated actions:
 | `EXCEPTION_USER_IDS` | Comma-separated user object IDs | `guid1,guid2,guid3` |
 
 ---
+### StaleGroupSweep Configuration
 
+#### Core Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STALE_DAYS` | `180` | Number of days of inactivity before a group is considered stale |
+| `MODE` | `detect` | Operation mode: `detect`, `delete`, `tag`, `archive` |
+| `GRAPH_API_VERSION` | `v1.0` | Microsoft Graph API version to use |
+| `MAX_ACTIONS` | `10` | Maximum total actions to perform in a single run |
+
+#### Action Confirmations
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONFIRM_DELETE` | `false` | Enable group deletion |
+| `CONFIRM_TAG` | `false` | Enable open extension tagging |
+| `CONFIRM_ARCHIVE` | `false` | Enable Teams group archiving |
+
+#### Action Throttles
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_DELETE` | `10` | Maximum groups to delete |
+| `MAX_TAG` | `25` | Maximum groups to tag |
+| `MAX_ARCHIVE` | `10` | Maximum Teams groups to archive |
+
+#### Other Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EXTENSION_NAME` | `STALE` | Open extension name for tagging |
+| `OUTPUT_ACTION_PLAN_CSV` | `false` | Generate action plan CSV output to blob storage |
+| `OUTPUT_INVENTORY_CSV` | `false` | Generate full group inventory CSV output to blob storage |
+| `ACTION_PARALLELISM` | `5` | Number of parallel actions (tune based on environment size) |
+
+#### Exception Lists (Groups)
+
+Protect specific groups from any automated actions:
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `EXCEPTION_GROUP_IDS` | Comma-separated group object IDs | `guid1,guid2,guid3` |
+| `EXCEPTION_NAME_PATTERNS` | Comma-separated group name wildcards | `admin-*,exec-*,security-*` |
+
+---
 ### Schedule
 
 Functions are triggered by timers using [cron expressions](https://en.wikipedia.org/wiki/Cron#CRON_expression) defined in their `function.json`:
