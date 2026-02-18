@@ -284,10 +284,10 @@ function Get-GroupMemberCount {
     )
     
     try {
-        $uri = "https://graph.microsoft.com/$graphApiVersion/groups/$GroupId/members/count"
+        $uri = "https://graph.microsoft.com/$graphApiVersion/groups/$GroupId/members/"
         $headers = @{ Authorization = "Bearer $AccessToken"; ConsistencyLevel = "eventual" }
         $countStr = Invoke-RestMethod -Method GET -Uri $uri -Headers $headers
-        [int]$countStr
+        [int]$countStr.value.count
     }
     catch {
         Write-Host "Warning: Failed to get member count for $GroupId : $_"
@@ -302,10 +302,10 @@ function Get-GroupOwnerCount {
     )
     
     try {
-        $uri = "https://graph.microsoft.com/$graphApiVersion/groups/$GroupId/owners/count"
+        $uri = "https://graph.microsoft.com/$graphApiVersion/groups/$GroupId/owners/"
         $headers = @{ Authorization = "Bearer $AccessToken"; ConsistencyLevel = "eventual" }
         $countStr = Invoke-RestMethod -Method GET -Uri $uri -Headers $headers
-        [int]$countStr
+        [int]$countStr.value.count
     }
     catch {
         Write-Host "Warning: Failed to get owner count for $GroupId : $_"
