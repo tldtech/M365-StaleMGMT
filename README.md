@@ -1,6 +1,6 @@
 # Entra ID Stale Resource Management - Azure Functions
 
-Azure Functions for identifying and managing stale devices and user accounts in Microsoft Entra ID with optional Intune integration for intelligent device lifecycle management.
+Azure Functions for identifying and managing stale devices, groups and user accounts in Microsoft Entra ID with optional Intune integration for intelligent device lifecycle management.
 
 ## Overview
 
